@@ -34,7 +34,7 @@ jobs:
         TEST_KEY=$(grep 'test_state_key:' config.yaml | awk -F'"' '{print $2}')
         REGION=$(grep 'aws_region:' config.yaml | awk -F'"' '{print $2}')
         
-        cd infra-test
+        cd infra_test
         
         # Dynamically inject the isolated test configurations directly into the engine
         terraform init \
