@@ -18,7 +18,6 @@ jobs:
     - name: Configure AWS Credentials via OIDC
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        # Fixed: Updated with your verified account ID from aws-test.yml
         role-to-assume: arn:aws:iam::925680695682:role/github-actions-bedrock-agent-role
         aws-region: us-east-1
 
@@ -34,6 +33,7 @@ jobs:
         TEST_KEY=$(grep 'test_state_key:' config.yaml | awk -F'"' '{print $2}')
         REGION=$(grep 'aws_region:' config.yaml | awk -F'"' '{print $2}')
         
+        # Navigate using the correct directory path containing underscores
         cd infra_test
         
         # Dynamically inject the isolated test configurations directly into the engine
@@ -42,4 +42,8 @@ jobs:
           -backend-config="key=${TEST_KEY}" \
           -backend-config="region=${REGION}"
           
+        # Purge the stale alias state records completely clean first
+        terraform destroy -auto-approve
+        
+        # Run the clean infrastructure build tracking our updated layout
         terraform apply -auto-approve
