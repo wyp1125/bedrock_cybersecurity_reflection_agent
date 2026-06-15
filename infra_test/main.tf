@@ -101,7 +101,7 @@ resource "aws_iam_role_policy" "agent_inference_profile_access" {
           "bedrock:InvokeModelWithResponseStream"
         ]
         # FIXED: Removed account ID to accurately match AWS system-defined profile ARN routing
-        Resource = "arn:aws:bedrock:us-east-1::inference-profile/us.anthropic.claude-sonnet-4-6"
+        Resource = "arn:aws:bedrock:us-east-1:925680695682:inference-profile/us.anthropic.claude-sonnet-4-6"
       },
       {
         Sid    = "InferenceProfileRead"
@@ -110,7 +110,7 @@ resource "aws_iam_role_policy" "agent_inference_profile_access" {
           "bedrock:GetInferenceProfile"
         ]
         # FIXED: Removed account ID here as well
-        Resource = "arn:aws:bedrock:us-east-1::inference-profile/us.anthropic.claude-sonnet-4-6"
+        Resource = "arn:aws:bedrock:us-east-1:925680695682:inference-profile/us.anthropic.claude-sonnet-4-6"
       }
     ]
   })
