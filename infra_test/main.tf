@@ -85,22 +85,34 @@ resource "aws_iam_role" "agent_role" {
   })
 }
 
-# Policy allowing Bedrock Agent to tap into Anthropic Claude foundation models
-resource "aws_iam_role_policy" "agent_policy" {
-  name = "terraform-cybersecurity-agent-execution-policy"
+# Policy allowing Bedrock Agent to read and invoke the Cross-Region Inference Profile
+resource "aws_iam_role_policy" "agent_inference_profile_access" {
+  name = "terraform-cybersecurity-agent-inference-profile-access"
   role = aws_iam_role.agent_role.id
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Action   = [ "bedrock:InvokeModel" ]
-      Effect   = "Allow"
-      Resource = [
-        "arn:aws:bedrock:us-east-1::foundation-model/us.anthropic.claude-sonnet-4-6",
-        "arn:aws:bedrock:us-east-1::inference-profile/*"
-      ]
-      
-    }]
+    Statement = [
+      {
+        Sid    = "InferenceProfileAccess"
+        Effect = "Allow"
+        Action = [
+          "bedrock:InvokeModel",
+          "bedrock:InvokeModelWithResponseStream"
+        ]
+        # FIXED: Removed account ID to accurately match AWS system-defined profile ARN routing
+        Resource = "arn:aws:bedrock:us-east-1::inference-profile/us.anthropic.claude-sonnet-4-6"
+      },
+      {
+        Sid    = "InferenceProfileRead"
+        Effect = "Allow"
+        Action = [
+          "bedrock:GetInferenceProfile"
+        ]
+        # FIXED: Removed account ID here as well
+        Resource = "arn:aws:bedrock:us-east-1::inference-profile/us.anthropic.claude-sonnet-4-6"
+      }
+    ]
   })
 }
 
