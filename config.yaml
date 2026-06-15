@@ -1,0 +1,22 @@
+# config.yaml
+version: "1.0"
+
+project:
+  name: "cybersecurity-reflection-agent"
+  environment: "production"
+
+infrastructure:
+  aws_region: "us-east-1"
+  terraform_backend:
+    s3_bucket: "bdx-agentic-ai"
+    state_key: "terraform/cybersecurity.reflection.terraform.tfstate"
+    encrypt: true
+  agentcore_deployment:
+    staging_bucket: "bdx-agentic-ai"
+    staging_prefix: "agents/cybersecurity-reflection-agent"
+
+agent_runtime:
+  agent_name: "cybersecurity-reflection-agent-core"
+  model_id: "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+  max_reflection_rounds: 5
+  timeout_seconds: 120

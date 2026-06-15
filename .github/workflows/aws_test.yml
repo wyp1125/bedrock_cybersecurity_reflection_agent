@@ -1,0 +1,26 @@
+# .github/workflows/aws-test.yml
+name: AWS Connection Test
+
+on:
+  # Allows you to trigger this test manually from the GitHub Actions UI tab
+  workflow_dispatch: 
+
+permissions:
+  id-token: write  # Mandatory for requesting the OIDC JWT token
+  contents: read   # Mandatory for checking out code if needed
+
+jobs:
+  test-connection:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Configure AWS Credentials via OIDC
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        # Swap this placeholder with your actual IAM Role ARN configured in your AWS account
+        role-to-assume: arn:aws:iam::925680695682:role/github-actions-bedrock-agent-role
+        aws-region: us-east-1
+
+    - name: Verify Identity Handshake
+      run: |
+        # This command prints your active assumed role details if successful
+        aws sts get-caller-identity
