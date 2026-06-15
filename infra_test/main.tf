@@ -8,7 +8,6 @@ terraform {
     }
   }
 
-  # Left empty intentionally. Dynamically populated at runtime via the workflow file.
   backend "s3" {}
 }
 
@@ -23,7 +22,6 @@ data "local_file" "config" {
 locals {
   cfg = yamldecode(data.local_file.config.content)
   
-  # Clean dynamic mapping from your configuration structure
   aws_region = local.cfg.infrastructure.aws_region
   agent_name = local.cfg.agent_runtime.agent_name
   model_id   = local.cfg.agent_runtime.model_id
@@ -84,7 +82,8 @@ resource "aws_lambda_function" "test_lambda" {
   environment {
     variables = {
       BEDROCK_AGENT_ID       = aws_bedrockagent_agent.test_agent.id
-      BEDROCK_AGENT_ALIAS_ID = aws_bedrockagent_agent_alias.test_agent_alias.agent_alias_id
+      # FIXED: Map directly to the built-in system alias for draft builds
+      BEDROCK_AGENT_ALIAS_ID = "TSTALIASID"
     }
   }
 }
@@ -129,17 +128,7 @@ resource "aws_bedrockagent_agent" "test_agent" {
   foundation_model            = local.model_id
   instruction                 = "You are a specialized cybersecurity assistant trained on NIST frameworks. Provide concise advice."
   idle_session_ttl_in_seconds = 600
-  prepare_agent               = true  # Automatically creates and builds the working agent snapshot
-}
-
-# FIXED: Set agent_version directly to "DRAFT" inside the routing configuration block
-resource "aws_bedrockagent_agent_alias" "test_agent_alias" {
-  agent_alias_name = "canary-active-routing-alias"
-  agent_id         = aws_bedrockagent_agent.test_agent.id
-
-  routing_configuration {
-    agent_version = "DRAFT"
-  }
+  prepare_agent               = true  
 }
 
 # -----------------------------------------------------------------------------
