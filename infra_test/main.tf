@@ -90,7 +90,7 @@ resource "aws_lambda_function" "test_lambda" {
 }
 
 # -----------------------------------------------------------------------------
-# 3. Bedrock Agent Core Configuration
+# 3. Bedrock Agent Core Configuration (Fixed Version Layout)
 # -----------------------------------------------------------------------------
 
 resource "aws_iam_role" "bedrock_agent_service_role" {
@@ -117,7 +117,6 @@ resource "aws_iam_role_policy" "bedrock_agent_model_access" {
         Sid      = "BedrockModelCloudAccess"
         Effect   = "Allow"
         Action   = ["bedrock:InvokeModel"]
-        # Uses the custom Inference Profile ARN from your configuration file
         Resource = "arn:aws:bedrock:${local.aws_region}::foundation-model/${local.model_id}"
       }
     ]
@@ -141,10 +140,14 @@ resource "aws_bedrockagent_agent_version" "test_agent_version" {
   }
 }
 
+# FIXED: Wrapped agent_version parameters within the mandatory nesting map block
 resource "aws_bedrockagent_agent_alias" "test_agent_alias" {
   agent_alias_name = "canary-active-routing-alias"
   agent_id         = aws_bedrockagent_agent.test_agent.agent_id
-  agent_version    = aws_bedrockagent_agent_version.test_agent_version.agent_version
+
+  routing_configuration {
+    agent_version = aws_bedrockagent_agent_version.test_agent_version.agent_version
+  }
 }
 
 # -----------------------------------------------------------------------------
