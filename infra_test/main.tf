@@ -1,4 +1,4 @@
-# infra_test/main.tf
+# infra_test/main.tf corrected
 terraform {
   required_version = ">= 1.5.7"
   required_providers {
