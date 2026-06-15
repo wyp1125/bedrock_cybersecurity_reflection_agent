@@ -13,18 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout Code Base
-      uses: actions/checkout@v4
-
-    - name: Configure AWS Credentials via OIDC
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: arn:aws:iam::925680695682:role/github-actions-bedrock-agent-role
-        aws-region: us-east-1
-
-    - name: Setup Terraform Control Plane
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: "1.5.7"
+# ... (Keep your checkout, AWS credentials, and setup-terraform steps exactly the same)
 
     - name: Initialize and Apply Test Stack
       run: |
@@ -42,17 +31,12 @@ jobs:
         terraform apply -auto-approve
 
         # -----------------------------------------------------------------------------
-        # Robust Post-Deployment Step: Pure JSON Parsing
+        # File-Based Parsing: Bypasses Terraform Wrapper Binary Completely
         # -----------------------------------------------------------------------------
-        echo "[INFO] Fetching newly created Agent ID from local state file..."
+        echo "[INFO] Extracting Agent ID directly from local state file structure..."
         
-        # Pull using ONLY -json, then let jq extract the raw value cleanly
-        AGENT_ID=$(terraform output -json | jq -r '.agent_id.value // empty')
-        
-        # Fallback tracking loop to search the state resources directly if the output isn't declared
-        if [ -z "$AGENT_ID" ]; then
-          AGENT_ID=$(terraform show -json | jq -r '.values.root_module.resources[]? | select(.type=="aws_bedrockagent_agent") | .values.id // empty' 2>/dev/null || true)
-        fi
+        # Read directly from the tfstate file on disk to avoid wrapper pollution
+        AGENT_ID=$(jq -r '.resources[] | select(.type=="aws_bedrockagent_agent") | .instances[0].attributes.id // empty' terraform.tfstate)
 
         if [ ! -z "$AGENT_ID" ] && [ "$AGENT_ID" != "null" ]; then
           echo "[INFO] Successfully target locked Bedrock Agent ID: ${AGENT_ID}"
@@ -60,5 +44,5 @@ jobs:
           aws bedrock-agent prepare-agent --agent-id "$AGENT_ID" --region "$REGION"
           echo "[SUCCESS] Agent snapshot built. Ready for canary traffic routing."
         else
-          echo "[WARNING] Could not extract active Agent ID for automated compilation setup."
+          echo "[WARNING] Could not find active Bedrock Agent resource attributes inside the state file."
         fi
