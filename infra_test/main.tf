@@ -95,7 +95,11 @@ resource "aws_iam_role_policy" "agent_policy" {
     Statement = [{
       Action   = [ "bedrock:InvokeModel" ]
       Effect   = "Allow"
-      Resource = "arn:aws:bedrock:us-east-1::foundation-model/us.anthropic.claude-sonnet-4-6"
+      Resource = [
+        "arn:aws:bedrock:us-east-1::foundation-model/us.anthropic.claude-sonnet-4-6",
+        "arn:aws:bedrock:us-east-1::inference-profile/*"
+      ]
+      
     }]
   })
 }
