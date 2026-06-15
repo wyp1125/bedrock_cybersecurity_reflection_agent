@@ -100,7 +100,8 @@ resource "aws_iam_role_policy" "agent_inference_profile_access" {
           "bedrock:InvokeModel",
           "bedrock:InvokeModelWithResponseStream"
         ]
-        Resource = "arn:aws:bedrock:us-east-1:925680695682:inference-profile/us.anthropic.claude-sonnet-4-6"
+        Resource = ["arn:aws:bedrock:us-east-1:925680695682:inference-profile/us.anthropic.claude-sonnet-4-6",
+                    "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6*"]
       },
       {
         Sid    = "InferenceProfileRead"
