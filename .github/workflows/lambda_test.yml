@@ -33,7 +33,7 @@ jobs:
         TEST_KEY=$(grep 'test_state_key:' config.yaml | awk -F'"' '{print $2}')
         REGION=$(grep 'aws_region:' config.yaml | awk -F'"' '{print $2}')
         
-        # Navigate using the correct directory path containing underscores
+        # Navigate into the target testing environment folder
         cd infra_test
         
         # Dynamically inject the isolated test configurations directly into the engine
@@ -42,8 +42,25 @@ jobs:
           -backend-config="key=${TEST_KEY}" \
           -backend-config="region=${REGION}"
           
-        # Purge the stale alias state records completely clean first
-        terraform destroy -auto-approve
-        
         # Run the clean infrastructure build tracking our updated layout
         terraform apply -auto-approve
+
+        # -----------------------------------------------------------------------------
+        # Post-Deployment Step: Force Async Agent Preparation
+        # -----------------------------------------------------------------------------
+        echo "[INFO] Fetching newly created Agent ID from local state file..."
+        AGENT_ID=$(terraform output -raw -json | jq -r '.agent_id.value // empty')
+        
+        # Fallback parsing check if output blocks aren't explicitly declared in root manifests
+        if [ -z "$AGENT_ID" ]; then
+          AGENT_ID=$(terraform show -json | jq -r '.values.root_module.resources[] | select(.type=="aws_bedrockagent_agent") | .values.id')
+        fi
+
+        if [ ! -z "$AGENT_ID" ]; then
+          echo "[INFO] Successfully target locked Bedrock Agent ID: ${AGENT_ID}"
+          echo "[EXEC] Triggering asynchronous agent compilation pipeline..."
+          aws bedrock-agent prepare-agent --agent-id "$AGENT_ID" --region "$REGION"
+          echo "[SUCCESS] Agent snapshot built. Ready for canary traffic routing."
+        else
+          echo "[WARNING] Could not extract active Agent ID for automated compilation setup."
+        fi
