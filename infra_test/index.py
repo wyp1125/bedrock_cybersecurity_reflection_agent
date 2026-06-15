@@ -1,4 +1,4 @@
-# infra-test/index.py
+# infra_test/index.py
 import json
 import boto3
 import os

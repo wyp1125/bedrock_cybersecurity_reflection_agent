@@ -1,4 +1,4 @@
-# infra-test/main.tf
+# infra_test/main.tf
 
 terraform {
   required_providers {
@@ -83,14 +83,14 @@ resource "aws_lambda_function" "test_lambda" {
 
   environment {
     variables = {
-      BEDROCK_AGENT_ID       = aws_bedrockagent_agent.test_agent.agent_id
+      BEDROCK_AGENT_ID       = aws_bedrockagent_agent.test_agent.id
       BEDROCK_AGENT_ALIAS_ID = aws_bedrockagent_agent_alias.test_agent_alias.agent_alias_id
     }
   }
 }
 
 # -----------------------------------------------------------------------------
-# 3. Bedrock Agent Core Configuration (Fixed Version Layout)
+# 3. Bedrock Agent Core Configuration
 # -----------------------------------------------------------------------------
 
 resource "aws_iam_role" "bedrock_agent_service_role" {
@@ -129,24 +129,16 @@ resource "aws_bedrockagent_agent" "test_agent" {
   foundation_model            = local.model_id
   instruction                 = "You are a specialized cybersecurity assistant trained on NIST frameworks. Provide concise advice."
   idle_session_ttl_in_seconds = 600
-  prepare_agent               = true
+  prepare_agent               = true  # Automatically creates and builds the working agent snapshot
 }
 
-resource "aws_bedrockagent_agent_version" "test_agent_version" {
-  agent_id    = aws_bedrockagent_agent.test_agent.agent_id
-  description = "Canary pipeline configuration tracking snapshot"
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# FIXED: Wrapped agent_version parameters within the mandatory nesting map block
+# FIXED: Set agent_version directly to "DRAFT" inside the routing configuration block
 resource "aws_bedrockagent_agent_alias" "test_agent_alias" {
   agent_alias_name = "canary-active-routing-alias"
-  agent_id         = aws_bedrockagent_agent.test_agent.agent_id
+  agent_id         = aws_bedrockagent_agent.test_agent.id
 
   routing_configuration {
-    agent_version = aws_bedrockagent_agent_version.test_agent_version.agent_version
+    agent_version = "DRAFT"
   }
 }
 
