@@ -15,16 +15,9 @@ def handler(event, context):
     client = boto3.client("bedrock-agent-runtime", region_name="us-east-1")
     
     try:
-        # Build the formal ARN layout required to query the DRAFT platform engine path
-        target_agent = agent_id
-        if not target_agent.startswith("arn:aws:bedrock"):
-            # Automatically grab metadata parameters out of the active Lambda invocation context
-            region = os.environ.get("AWS_REGION", "us-east-1")
-            account_id = context.invoked_function_arn.split(":")[4]
-            target_agent = f"arn:aws:bedrock:{region}:{account_id}:agent/{agent_id}"
-
+        # Pass the raw 10-character alphanumeric ID directly to satisfy AWS validation constraints
         response = client.invoke_agent(
-            agentId=target_agent,
+            agentId=agent_id,
             agentAliasId=agent_alias_id,
             sessionId=session_id,
             inputText=prompt
