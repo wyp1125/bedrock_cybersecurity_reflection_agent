@@ -56,7 +56,11 @@ resource "aws_iam_role_policy" "lambda_policy" {
       {
         Action   = [ "bedrock:InvokeAgent" ]
         Effect   = "Allow"
-        Resource = "arn:aws:bedrock:us-east-1:*:agent/*"
+        # FIXED: Explicitly added the agent-alias resource path pattern matching to resolve AccessDeniedException
+        Resource = [
+          "arn:aws:bedrock:us-east-1:925680695682:agent/*",
+          "arn:aws:bedrock:us-east-1:925680695682:agent-alias/*"
+        ]
       }
     ]
   })
