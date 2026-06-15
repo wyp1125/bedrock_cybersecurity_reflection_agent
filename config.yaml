@@ -10,6 +10,7 @@ infrastructure:
   terraform_backend:
     s3_bucket: "bdx-agentic-ai"
     state_key: "terraform/cybersecurity.reflection.terraform.tfstate"
+    test_state_key: "terraform/test.terraform.tfstate"
     encrypt: true
   agentcore_deployment:
     staging_bucket: "bdx-agentic-ai"

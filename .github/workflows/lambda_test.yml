@@ -1,0 +1,44 @@
+# .github/workflows/lambda_test.yml
+name: Terraform Lambda Test Deploy
+
+on:
+  workflow_dispatch: 
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  terraform-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Code Base
+      uses: actions/checkout@v4
+
+    - name: Configure AWS Credentials via OIDC
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/github-actions-bedrock-agent-role
+        aws-region: us-east-1
+
+    - name: Setup Terraform Control Plane
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: "1.5.7"
+
+    - name: Initialize and Apply Test Stack
+      run: |
+        # Safely extract target back-end metadata directly from config.yaml
+        BUCKET=$(grep 's3_bucket:' config.yaml | awk -F'"' '{print $2}')
+        TEST_KEY=$(grep 'test_state_key:' config.yaml | awk -F'"' '{print $2}')
+        REGION=$(grep 'aws_region:' config.yaml | awk -F'"' '{print $2}')
+        
+        cd infra-test
+        
+        # Dynamically inject the isolated test configurations directly into the engine
+        terraform init \
+          -backend-config="bucket=${BUCKET}" \
+          -backend-config="key=${TEST_KEY}" \
+          -backend-config="region=${REGION}"
+          
+        terraform apply -auto-approve
