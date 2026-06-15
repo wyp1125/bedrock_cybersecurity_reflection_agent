@@ -4,9 +4,9 @@ import boto3
 import os
 
 def handler(event, context):
-    # Fallback strings for testing handles
+    # Extract structural environment handles deployed via your Terraform pipeline
     agent_id = os.environ.get("BEDROCK_AGENT_ID", "NOT_CONFIGURED")
-    agent_alias_id = os.environ.get("BEDROCK_AGENT_ALIAS_ID", "TSTALIASID") # TSTALIASID is default for DRAFT versions
+    agent_alias_id = os.environ.get("BEDROCK_AGENT_ALIAS_ID", "TSTALIASID") 
     
     # Extract the user's inquiry text string safely
     prompt = event.get("prompt", "Verify system operational baseline metrics.")
@@ -15,8 +15,16 @@ def handler(event, context):
     client = boto3.client("bedrock-agent-runtime", region_name="us-east-1")
     
     try:
+        # Build the formal ARN layout required to query the DRAFT platform engine path
+        target_agent = agent_id
+        if not target_agent.startswith("arn:aws:bedrock"):
+            # Automatically grab metadata parameters out of the active Lambda invocation context
+            region = os.environ.get("AWS_REGION", "us-east-1")
+            account_id = context.invoked_function_arn.split(":")[4]
+            target_agent = f"arn:aws:bedrock:{region}:{account_id}:agent/{agent_id}"
+
         response = client.invoke_agent(
-            agentId=agent_id,
+            agentId=target_agent,
             agentAliasId=agent_alias_id,
             sessionId=session_id,
             inputText=prompt

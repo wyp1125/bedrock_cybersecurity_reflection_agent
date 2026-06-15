@@ -1,4 +1,4 @@
-# infra-test/local_test.py
+# infra_test/local_test.py
 import json
 import boto3
 import yaml
@@ -7,7 +7,7 @@ import os
 def run_local_canary_test():
     config_path = os.path.join(os.path.dirname(__file__), "../config.yaml")
     
-    print("📖 Reading configuration file...")
+    print("[INFO] Reading configuration file...")
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
         
@@ -15,7 +15,7 @@ def run_local_canary_test():
     state_key = config["infrastructure"]["terraform_backend"]["test_state_key"]
     aws_region = config["infrastructure"]["aws_region"]
     
-    print(f"🔄 Fetching target state tracking metrics from s3://{bucket_name}/{state_key}...")
+    print(f"[INFO] Fetching target state tracking metrics from s3://{bucket_name}/{state_key}...")
     s3 = boto3.client("s3", region_name=aws_region)
     
     try:
@@ -28,9 +28,9 @@ def run_local_canary_test():
         if not lambda_name:
             raise ValueError("Failed to extract active deployment targets from state mapping.")
             
-        print(f"✅ Found active Lambda target: '{lambda_name}'")
+        print(f"[SUCCESS] Found active Lambda target: '{lambda_name}'")
         
-        print("\n🚀 Sending test invocation payload...")
+        print("\n[EXEC] Sending test invocation payload...")
         lambda_client = boto3.client("lambda", region_name=aws_region)
         
         test_payload = {
@@ -45,11 +45,11 @@ def run_local_canary_test():
         )
         
         result = json.loads(invocation_response["Payload"].read().decode("utf-8"))
-        print("\n📥 Response payload received from Lambda Execution Plane:")
+        print("\n[RESPONSE] Response payload received from Lambda Execution Plane:")
         print(json.dumps(result, indent=2))
         
     except Exception as e:
-        print(f"❌ Verification run aborted: {str(e)}")
+        print(f"[ERROR] Verification run aborted: {str(e)}")
 
 if __name__ == "__main__":
     run_local_canary_test()
