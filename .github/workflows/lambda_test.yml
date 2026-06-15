@@ -18,7 +18,8 @@ jobs:
     - name: Configure AWS Credentials via OIDC
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        role-to-assume: arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/github-actions-bedrock-agent-role
+        # Fixed: Updated with your verified account ID from aws-test.yml
+        role-to-assume: arn:aws:iam::925680695682:role/github-actions-bedrock-agent-role
         aws-region: us-east-1
 
     - name: Setup Terraform Control Plane
