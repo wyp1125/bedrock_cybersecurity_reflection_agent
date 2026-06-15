@@ -95,7 +95,7 @@ resource "aws_iam_role_policy" "agent_policy" {
     Statement = [{
       Action   = [ "bedrock:InvokeModel" ]
       Effect   = "Allow"
-      Resource = "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-6"
+      Resource = "arn:aws:bedrock:us-east-1::foundation-model/us.anthropic.claude-sonnet-4-6"
     }]
   })
 }
@@ -107,7 +107,7 @@ resource "aws_iam_role_policy" "agent_policy" {
 resource "aws_bedrockagent_agent" "test_agent" {
   agent_name                  = "cybersecurity-reflection-agent-core"
   agent_resource_role_arn     = aws_iam_role.agent_role.arn
-  foundation_model            = "anthropic.claude-sonnet-4-6"
+  foundation_model            = "us.anthropic.claude-sonnet-4-6"
   instruction                 = "You are an elite cybersecurity agent executing deep reflection. Analyze system architecture vectors systematically."
   prepare_agent               = true
   idle_session_ttl_in_seconds = 600
