@@ -34,7 +34,7 @@ resource "aws_iam_role" "lambda_role" {
       Principal = { Service = "lambda.amazonaws.com" }
     }]
   })
-})
+}
 
 # Policy allowing Lambda to invoke Bedrock Agents and log execution outputs
 resource "aws_iam_role_policy" "lambda_policy" {
@@ -60,7 +60,7 @@ resource "aws_iam_role_policy" "lambda_policy" {
       }
     ]
   })
-})
+}
 
 # Execution Trust Role for Amazon Bedrock Agent Service
 resource "aws_iam_role" "agent_role" {
@@ -79,7 +79,7 @@ resource "aws_iam_role" "agent_role" {
       }
     }]
   })
-})
+}
 
 # Policy allowing Bedrock Agent to tap into Anthropic Claude foundation models
 resource "aws_iam_role_policy" "agent_policy" {
@@ -94,7 +94,7 @@ resource "aws_iam_role_policy" "agent_policy" {
       Resource = "arn:aws:bedrock:us-east-1::foundation-model/us.anthropic.claude-3-5-sonnet-20241022-v2:0"
     }]
   })
-})
+}
 
 # -----------------------------------------------------------------------------
 # 2. Foundation AI Layer - Amazon Bedrock Agent Setup
@@ -128,7 +128,7 @@ resource "aws_lambda_function" "test_lambda" {
   runtime          = "python3.12"
   timeout          = 30
 
-  # CRITICAL: Forces compilation tracking. Re-zips and patches the Lambda whenever index.py changes
+  # Forces compilation tracking. Re-zips and patches the Lambda whenever index.py changes
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 
   environment {
