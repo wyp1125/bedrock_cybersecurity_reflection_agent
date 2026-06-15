@@ -28,39 +28,33 @@ jobs:
 
     - name: Initialize and Apply Test Stack
       run: |
-        # Safely extract target back-end metadata directly from config.yaml
         BUCKET=$(grep 's3_bucket:' config.yaml | awk -F'"' '{print $2}')
         TEST_KEY=$(grep 'test_state_key:' config.yaml | awk -F'"' '{print $2}')
         REGION=$(grep 'aws_region:' config.yaml | awk -F'"' '{print $2}')
         
-        # Navigate into the target testing environment folder
         cd infra_test
         
-        # Dynamically inject the isolated test configurations directly into the engine
         terraform init \
           -backend-config="bucket=${BUCKET}" \
           -backend-config="key=${TEST_KEY}" \
           -backend-config="region=${REGION}"
           
-        # Run the clean infrastructure build tracking our updated layout
         terraform apply -auto-approve
 
         # -----------------------------------------------------------------------------
-        # Post-Deployment Step: Force Async Agent Preparation
+        # Fixed Post-Deployment Step: Direct Native String Extraction
         # -----------------------------------------------------------------------------
-        echo "[INFO] Fetching newly created Agent ID from local state file..."
-        AGENT_ID=$(terraform output -raw -json | jq -r '.agent_id.value // empty')
+        echo "[INFO] Fetching target metadata metrics from local state records..."
         
-        # Fallback parsing check if output blocks aren't explicitly declared in root manifests
-        if [ -z "$AGENT_ID" ]; then
-          AGENT_ID=$(terraform show -json | jq -r '.values.root_module.resources[] | select(.type=="aws_bedrockagent_agent") | .values.id')
-        fi
+        # Pulling directly using the explicit raw output hook we just created
+        AGENT_ID=$(terraform output -raw agent_id)
 
-        if [ ! -z "$AGENT_ID" ]; then
+        if [ ! -z "$AGENT_ID" ] && [ "$AGENT_ID" != "null" ]; then
           echo "[INFO] Successfully target locked Bedrock Agent ID: ${AGENT_ID}"
           echo "[EXEC] Triggering asynchronous agent compilation pipeline..."
           aws bedrock-agent prepare-agent --agent-id "$AGENT_ID" --region "$REGION"
           echo "[SUCCESS] Agent snapshot built. Ready for canary traffic routing."
         else
-          echo "[WARNING] Could not extract active Agent ID for automated compilation setup."
+          echo "[ERROR] Failed to extract a valid Agent ID target from the active run state."
+          exit 1
         fi

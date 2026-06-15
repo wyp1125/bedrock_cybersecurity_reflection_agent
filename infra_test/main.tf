@@ -138,3 +138,8 @@ resource "aws_bedrockagent_agent" "test_agent" {
 output "lambda_function_name" {
   value = aws_lambda_function.test_lambda.function_name
 }
+
+# ADD THIS BLOCK: Expose the raw ID cleanly to the pipeline shell environment
+output "agent_id" {
+  value = aws_bedrockagent_agent.test_agent.id
+}
