@@ -53,7 +53,8 @@ jobs:
         working-directory: src/infra
         run: |
           terraform import aws_iam_role.lambda_execution_role terraform-cybersecurity-lambda-proxy-execution-role || true
-          terraform import aws_iam_role.agentcore_execution_role terraform-cybersecurity-agentcore-execution-role || true
+          terraform import aws_iam_role.agentcore_execution_role terraform-reflection-agent-execution-role || true
+          
         
       - name: Terraform Validate
         working-directory: src/infra
