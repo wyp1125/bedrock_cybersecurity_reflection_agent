@@ -1,14 +1,7 @@
 name: Deploy NIST Mapping Reflection Agent
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'src/agent.py'
-      - 'src/generator_prompt.txt'
-      - 'src/evaluator_prompt.txt'
-      - 'config.yaml'
+  workflow_dispatch: 
 
 permissions:
   id-token: write
