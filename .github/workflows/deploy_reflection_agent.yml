@@ -25,12 +25,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::925680695682:role/github-actions-deployment-role
+          role-to-assume: arn:aws:iam::925680695682:role/github-actions-bedrock-agent-role
           aws-region: us-east-1
 
       - name: Set up Terraform
