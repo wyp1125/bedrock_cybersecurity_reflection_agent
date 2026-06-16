@@ -137,8 +137,6 @@ resource "aws_lambda_function" "api_proxy" {
     variables = {
       AGENT_RUNTIME_ARN       = aws_bedrockagentcore_agent_runtime.nist_reflection_agent.agent_runtime_arn
       AGENT_RUNTIME_QUALIFIER = aws_bedrockagentcore_agent_runtime_endpoint.default.name
-      AWS_REGION              = local.aws_region
-      AWS_DEFAULT_REGION      = local.aws_region
     }
   }
 

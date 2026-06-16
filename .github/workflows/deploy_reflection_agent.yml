@@ -54,7 +54,6 @@ jobs:
         run: |
           terraform import aws_iam_role.lambda_execution_role terraform-cybersecurity-lambda-proxy-execution-role || true
           terraform import aws_iam_role.agentcore_execution_role terraform-reflection-agent-execution-role || true
-          terraform import aws_bedrockagentcore_agent_runtime.nist_reflection_agent nist_mapping_reflection_agent || true
         
       - name: Terraform Validate
         working-directory: src/infra

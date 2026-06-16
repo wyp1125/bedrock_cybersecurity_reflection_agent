@@ -10,18 +10,25 @@ from botocore.exceptions import ClientError
 
 AGENT_RUNTIME_ARN = os.environ.get("AGENT_RUNTIME_ARN")
 AGENT_RUNTIME_QUALIFIER = os.environ.get("AGENT_RUNTIME_QUALIFIER")
-AWS_REGION = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
 
-client = boto3.client("bedrock-agentcore", region_name=AWS_REGION)
+# AWS_REGION is automatically provided by Lambda.
+REGION = os.environ.get("AWS_REGION") or "us-east-1"
+
+client = boto3.client("bedrock-agentcore", region_name=REGION)
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    if event.get("requestContext", {}).get("http", {}).get("method") == "OPTIONS":
+    method = (
+        event.get("requestContext", {}).get("http", {}).get("method")
+        or event.get("httpMethod")
+    )
+
+    if method == "OPTIONS":
         return build_response(204, {})
 
     if not AGENT_RUNTIME_ARN:
         return build_response(500, {
-            "error": "Configuration error: AGENT_RUNTIME_ARN environment variable is not set."
+            "error": "Configuration error: AGENT_RUNTIME_ARN is not set."
         })
 
     try:
@@ -44,31 +51,9 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "error": "Missing required input. Provide one of: issue, prompt, input, or message."
         })
 
-    agent_payload = {
-        "prompt": str(user_prompt)
-    }
-
     try:
-        invoke_args = {
-            "agentRuntimeArn": AGENT_RUNTIME_ARN,
-            "accept": "application/json",
-            "contentType": "application/json",
-            "payload": json.dumps(agent_payload).encode("utf-8"),
-            "runtimeSessionId": get_session_id(event),
-        }
-
-        if AGENT_RUNTIME_QUALIFIER:
-            invoke_args["qualifier"] = AGENT_RUNTIME_QUALIFIER
-
-        response = client.invoke_agent_runtime(**invoke_args)
-
-        response_body = read_agentcore_payload(response.get("payload"))
-        agent_raw_output = parse_agent_response(response_body)
-
-        if isinstance(agent_raw_output, dict) and "result" in agent_raw_output:
-            return build_response(200, agent_raw_output["result"])
-
-        return build_response(200, agent_raw_output)
+        response = invoke_agentcore(event, str(user_prompt))
+        return build_response(200, response)
 
     except ClientError as exc:
         error = exc.response.get("Error", {})
@@ -83,6 +68,29 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "error": "Internal gateway routing exception during execution.",
             "details": str(exc)
         })
+
+
+def invoke_agentcore(event: Dict[str, Any], prompt: str) -> Any:
+    invoke_args = {
+        "agentRuntimeArn": AGENT_RUNTIME_ARN,
+        "accept": "application/json",
+        "contentType": "application/json",
+        "payload": json.dumps({"prompt": prompt}).encode("utf-8"),
+        "runtimeSessionId": get_session_id(event),
+    }
+
+    if AGENT_RUNTIME_QUALIFIER:
+        invoke_args["qualifier"] = AGENT_RUNTIME_QUALIFIER
+
+    response = client.invoke_agent_runtime(**invoke_args)
+
+    response_body = read_agentcore_payload(response.get("payload"))
+    parsed = parse_agent_response(response_body)
+
+    if isinstance(parsed, dict) and "result" in parsed:
+        return parsed["result"]
+
+    return parsed
 
 
 def parse_body(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -115,14 +123,16 @@ def parse_body(event: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def get_session_id(event: Dict[str, Any]) -> str:
-    headers = normalize_headers(event.get("headers", {}))
+    headers = normalize_headers(event.get("headers"))
 
-    return (
+    session_id = (
         headers.get("x-session-id")
         or headers.get("x-amzn-bedrock-agentcore-runtime-session-id")
         or event.get("requestContext", {}).get("requestId")
         or str(uuid.uuid4())
     )
+
+    return str(session_id)[:128]
 
 
 def normalize_headers(headers: Optional[Dict[str, Any]]) -> Dict[str, str]:
@@ -141,22 +151,32 @@ def read_agentcore_payload(payload_stream: Any) -> str:
         return ""
 
     if hasattr(payload_stream, "read"):
-        return payload_stream.read().decode("utf-8")
+        raw = payload_stream.read()
+        if isinstance(raw, bytes):
+            return raw.decode("utf-8")
+        return str(raw)
 
     chunks = []
 
-    for event in payload_stream:
-        if "chunk" in event:
-            chunk = event["chunk"]
+    for stream_event in payload_stream:
+        if "chunk" in stream_event:
+            chunk = stream_event["chunk"]
             chunk_bytes = chunk.get("bytes") or chunk.get("data")
             if chunk_bytes:
-                chunks.append(chunk_bytes.decode("utf-8"))
-        elif "payloadPart" in event:
-            chunk_bytes = event["payloadPart"].get("bytes")
+                chunks.append(decode_chunk(chunk_bytes))
+
+        elif "payloadPart" in stream_event:
+            chunk_bytes = stream_event["payloadPart"].get("bytes")
             if chunk_bytes:
-                chunks.append(chunk_bytes.decode("utf-8"))
+                chunks.append(decode_chunk(chunk_bytes))
 
     return "".join(chunks)
+
+
+def decode_chunk(chunk: Any) -> str:
+    if isinstance(chunk, bytes):
+        return chunk.decode("utf-8")
+    return str(chunk)
 
 
 def parse_agent_response(response_body: str) -> Any:
