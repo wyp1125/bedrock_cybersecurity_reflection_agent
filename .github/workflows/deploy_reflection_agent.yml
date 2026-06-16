@@ -49,6 +49,12 @@ jobs:
         working-directory: src/infra
         run: terraform init -upgrade
 
+      - name: Import existing IAM roles
+        working-directory: src/infra
+        run: |
+          terraform import aws_iam_role.lambda_execution_role terraform-cybersecurity-lambda-proxy-execution-role || true
+          terraform import aws_iam_role.agentcore_execution_role terraform-cybersecurity-agentcore-execution-role || true
+        
       - name: Terraform Validate
         working-directory: src/infra
         run: terraform validate
