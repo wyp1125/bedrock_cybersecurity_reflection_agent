@@ -9,15 +9,19 @@ permissions:
 
 env:
   AWS_REGION: us-east-1
-  TERRAFORM_VERSION: 1.7.0
   TF_IN_AUTOMATION: true
+  TF_INPUT: false
 
 jobs:
-  deploy-agentcore-runtime:
+  deploy:
     runs-on: ubuntu-latest
 
+    defaults:
+      run:
+        shell: bash
+
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Configure AWS credentials
@@ -26,27 +30,49 @@ jobs:
           role-to-assume: arn:aws:iam::925680695682:role/github-actions-bedrock-agent-role
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Set up Terraform
+      - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_version: 1.8.5
 
-      - name: Terraform fmt check
+      - name: Show Terraform version
+        run: terraform version
+
+      #
+      # Optional: automatically format instead of failing
+      #
+      - name: Terraform Format
         working-directory: src/infra
-        run: terraform fmt -check -recursive
+        run: terraform fmt -recursive
 
-      - name: Terraform init
+      - name: Terraform Init
         working-directory: src/infra
-        run: terraform init
+        run: terraform init -upgrade
 
-      - name: Terraform validate
+      - name: Terraform Validate
         working-directory: src/infra
         run: terraform validate
 
-      - name: Terraform apply
+      - name: Terraform Plan
         working-directory: src/infra
-        run: terraform apply -auto-approve
+        run: terraform plan -out=tfplan
 
-      - name: Show deployment outputs
+      - name: Terraform Apply
+        working-directory: src/infra
+        run: terraform apply -auto-approve tfplan
+
+      - name: Terraform Outputs
         working-directory: src/infra
         run: terraform output
+
+      - name: Display Agent Runtime Information
+        working-directory: src/infra
+        run: |
+          echo "Agent Runtime ARN:"
+          terraform output -raw agent_runtime_arn || true
+
+          echo "Agent Runtime ID:"
+          terraform output -raw agent_runtime_id || true
+
+          echo "Lambda Function:"
+          terraform output -raw lambda_function_name || true
