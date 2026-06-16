@@ -34,7 +34,8 @@ resource "aws_s3_object" "agent_code" {
 }
 
 # 4. Provision the underlying Bedrock Agent Configuration
-resource "aws_bedrock_agent" "nist_reflection_agent" {
+# FIXED: Updated type descriptor to match provider requirements
+resource "aws_bedrockagent_agent" "nist_reflection_agent" {
   agent_name                  = local.config.agent_runtime.agent_name
   agent_resource_role_arn     = aws_iam_role.agent_execution_role.arn
   foundation_model            = local.config.agent_runtime.model_id
@@ -47,17 +48,19 @@ resource "aws_bedrock_agent" "nist_reflection_agent" {
 }
 
 # 5. Compile the active operational version sequence code block 
-resource "aws_bedrock_agent_agent_version" "latest" {
-  agent_id      = aws_bedrock_agent.nist_reflection_agent.id
-  description   = "Strands framework deployment synced by Terraform tracking hash: ${data.archive_file.agent_bundle.output_md5}"
+# FIXED: Updated type descriptor to match provider requirements
+resource "aws_bedrockagent_agent_version" "latest" {
+  agent_id    = aws_bedrockagent_agent.nist_reflection_agent.id
+  description = "Strands framework deployment synced by Terraform tracking hash: ${data.archive_file.agent_bundle.output_md5}"
 }
 
 # 6. Establish the operational pipeline testing alias endpoint
-resource "aws_bedrock_agent_agent_alias" "test_alias" {
-  agent_id        = aws_bedrock_agent.nist_reflection_agent.id
+# FIXED: Updated type descriptor to match provider requirements
+resource "aws_bedrockagent_agent_alias" "test_alias" {
+  agent_id         = aws_bedrockagent_agent.nist_reflection_agent.id
   agent_alias_name = "TSTALIASID"
   routing_configuration {
-    agent_version = aws_bedrock_agent_agent_version.latest.version
+    agent_version = aws_bedrockagent_agent_version.latest.version
   }
 }
 
@@ -81,8 +84,8 @@ resource "aws_lambda_function" "api_proxy" {
   environment {
     variables = {
       # THE DYNAMIC LINK: Pulls resource identifiers directly from the newly created Bedrock block
-      BEDROCK_AGENT_ID       = aws_bedrock_agent.nist_reflection_agent.id
-      BEDROCK_AGENT_ALIAS_ID = aws_bedrock_agent_agent_alias.test_alias.agent_alias_id
+      BEDROCK_AGENT_ID       = aws_bedrockagent_agent.nist_reflection_agent.id
+      BEDROCK_AGENT_ALIAS_ID = aws_bedrockagent_agent_alias.test_alias.agent_alias_id
     }
   }
 }
@@ -158,8 +161,8 @@ resource "aws_iam_role_policy" "lambda_bedrock_invocation" {
       Effect   = "Allow"
       Action   = ["bedrock:InvokeAgent"]
       Resource = [
-        "${aws_bedrock_agent.nist_reflection_agent.arn}",
-        "${aws_bedrock_agent.nist_reflection_agent.arn}/*"
+        "${aws_bedrockagent_agent.nist_reflection_agent.agent_arn}",
+        "${aws_bedrockagent_agent.nist_reflection_agent.agent_arn}/*"
       ]
     }]
   })
