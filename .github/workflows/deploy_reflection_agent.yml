@@ -60,6 +60,8 @@ jobs:
       - name: Terraform Apply
         working-directory: src/infra
         run: terraform apply -auto-approve tfplan
+        env:
+            TF_LOG: INFO
 
       - name: Terraform Outputs
         working-directory: src/infra
