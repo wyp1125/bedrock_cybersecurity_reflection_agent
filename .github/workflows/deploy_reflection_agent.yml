@@ -1,83 +1,52 @@
 name: Deploy NIST Mapping Reflection Agent
 
 on:
-  workflow_dispatch: 
+  workflow_dispatch:
 
 permissions:
   id-token: write
   contents: read
 
+env:
+  AWS_REGION: us-east-1
+  TERRAFORM_VERSION: 1.7.0
+  TF_IN_AUTOMATION: true
+
 jobs:
-  deploy-infrastructure-and-agent:
+  deploy-agentcore-runtime:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Python Runtime
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Configure AWS Credentials
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::925680695682:role/github-actions-bedrock-agent-role
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.7.0
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Deploy Infrastructure Layers (Terraform)
-        id: terraform
-        run: |
-          cd src/infra
-          terraform init
-          terraform apply -auto-approve
+      - name: Terraform fmt check
+        working-directory: src/infra
+        run: terraform fmt -check -recursive
 
-      - name: Build Strands Agent Bundle
-        run: |
-          mkdir -p build_artifact
-          # Install dependencies into target artifact directory
-          pip install strands python-dotenv -t build_artifact/
-          
-          # Copy core execution scripts, configuration, and prompt layers
-          cp app.py build_artifact/
-          cp generator_prompt.txt build_artifact/
-          cp evaluator_prompt.txt build_artifact/
-          cp config.yaml build_artifact/
-          
-          # Zip code bundle from within the staging folder to prevent nested paths
-          cd build_artifact
-          zip -r ../nist_mapping_agent.zip .
-          cd ..
+      - name: Terraform init
+        working-directory: src/infra
+        run: terraform init
 
-      - name: Upload Deployment Artifact to S3
-        run: |
-          aws s3 cp nist_mapping_agent.zip s3://bdx-agentic-ai/agents/cybersecurity-reflection-agent/nist_mapping_agent.zip
+      - name: Terraform validate
+        working-directory: src/infra
+        run: terraform validate
 
-      - name: Deploy and Sync Agent State to Amazon Bedrock
-        run: |
-          # Sync agent metadata and execution configuration
-          aws bedrock-agent update-agent \
-            --agent-id "4XXQJUMF0E" \
-            --agent-name "nist-mapping-reflection-agent" \
-            --agent-resource-role-arn "arn:aws:iam::925680695682:role/terraform-cybersecurity-agent-execution-role" \
-            --region "us-east-1"
-          
-          # Compile and lock deployment changes into active runtime state
-          aws bedrock-agent prepare-agent \
-            --agent-id "4XXQJUMF0E" \
-            --region "us-east-1"
+      - name: Terraform apply
+        working-directory: src/infra
+        run: terraform apply -auto-approve
 
-      - name: Update Proxy Lambda Execution Bundle
-        run: |
-          # Package and update the Lambda function that sits behind your API Gateway
-          cd infra_test/lambda
-          zip -r lambda_function.zip index.py
-          aws lambda update-function-code \
-            --function-name "cybersecurity-agent-api-proxy" \
-            --zip-file fileb://lambda_function.zip \
-            --region "us-east-1"
+      - name: Show deployment outputs
+        working-directory: src/infra
+        run: terraform output

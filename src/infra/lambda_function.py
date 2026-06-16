@@ -1,82 +1,191 @@
+import base64
 import json
 import os
+import uuid
+from typing import Any, Dict, Optional
+
 import boto3
+from botocore.exceptions import ClientError
 
-# The unique AWS Resource Name (ARN) assigned to your deployed AgentCore Runtime.
-# This should be injected into your Lambda function's environment variables.
+
 AGENT_RUNTIME_ARN = os.environ.get("AGENT_RUNTIME_ARN")
+AGENT_RUNTIME_QUALIFIER = os.environ.get("AGENT_RUNTIME_QUALIFIER")
+AWS_REGION = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
 
-# Initialize the Bedrock AgentCore Data Plane client
-# Note: Ensure the client targets the correct region where your agent is hosted.
-client = boto3.client("bedrock-agentcore", region_name=os.environ.get("AWS_REGION", "us-west-2"))
+client = boto3.client("bedrock-agentcore", region_name=AWS_REGION)
 
-def lambda_handler(event, context):
-    """
-    AWS Lambda handler designed for API Gateway Lambda Proxy Integration.
-    Invokes the deployed Amazon Bedrock AgentCore Runtime using the official AWS SDK.
-    """
+
+def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    if event.get("requestContext", {}).get("http", {}).get("method") == "OPTIONS":
+        return build_response(204, {})
+
     if not AGENT_RUNTIME_ARN:
-        return build_response(500, {"error": "Configuration error: AGENT_RUNTIME_ARN environment variable is not set."})
-
-    # 1. Parse and validate the incoming payload from API Gateway
-    try:
-        body_str = event.get("body", "{}") or "{}"
-        body_data = json.loads(body_str)
-        user_cyber_issue = body_data.get("issue")
-    except (json.JSONDecodeError, TypeError) as e:
-        return build_response(400, {"error": "Malformed JSON payload.", "details": str(e)})
-
-    if not user_cyber_issue:
-        return build_response(400, {"error": "Missing mandatory parameter: 'issue' field is required."})
-
-    # 2. Package payload into the {"prompt": "..."} format expected by agent.py
-    agent_payload = {"prompt": user_cyber_issue}
-    
-    try:
-        # 3. Programmatically invoke the AgentCore Runtime container cluster via AWS SDK
-        # This automatically handles AWS SigV4 signing under the hood
-        response = client.invoke_agent_runtime(
-            agentRuntimeArn=AGENT_RUNTIME_ARN,
-            accept="application/json",
-            contentType="application/json",
-            payload=json.dumps(agent_payload).encode("utf-8")
-        )
-        
-        # 4. Read the streaming blob response from the agent runtime
-        response_body = response["payload"].read().decode("utf-8")
-        agent_raw_output = json.loads(response_body)
-        
-        # Extract the final result returned from your run_reflection_loop inside agent.py
-        agent_result = agent_raw_output.get("result", {})
-        
-        return build_response(200, agent_result)
-
-    except client.exceptions.ClientError as e:
-        # Catch specific AWS IAM permission, throttle, or missing asset errors
-        return build_response(400, {
-            "error": "AWS Bedrock AgentCore client exception occurred.",
-            "details": e.response["Error"]["Message"]
+        return build_response(500, {
+            "error": "Configuration error: AGENT_RUNTIME_ARN environment variable is not set."
         })
-        
-    except Exception as e:
-        # Catch generic system or timeout errors
+
+    try:
+        body_data = parse_body(event)
+    except ValueError as exc:
+        return build_response(400, {
+            "error": "Malformed request body.",
+            "details": str(exc)
+        })
+
+    user_prompt = (
+        body_data.get("issue")
+        or body_data.get("prompt")
+        or body_data.get("input")
+        or body_data.get("message")
+    )
+
+    if not user_prompt:
+        return build_response(400, {
+            "error": "Missing required input. Provide one of: issue, prompt, input, or message."
+        })
+
+    agent_payload = {
+        "prompt": str(user_prompt)
+    }
+
+    try:
+        invoke_args = {
+            "agentRuntimeArn": AGENT_RUNTIME_ARN,
+            "accept": "application/json",
+            "contentType": "application/json",
+            "payload": json.dumps(agent_payload).encode("utf-8"),
+            "runtimeSessionId": get_session_id(event),
+        }
+
+        if AGENT_RUNTIME_QUALIFIER:
+            invoke_args["qualifier"] = AGENT_RUNTIME_QUALIFIER
+
+        response = client.invoke_agent_runtime(**invoke_args)
+
+        response_body = read_agentcore_payload(response.get("payload"))
+        agent_raw_output = parse_agent_response(response_body)
+
+        if isinstance(agent_raw_output, dict) and "result" in agent_raw_output:
+            return build_response(200, agent_raw_output["result"])
+
+        return build_response(200, agent_raw_output)
+
+    except ClientError as exc:
+        error = exc.response.get("Error", {})
+        return build_response(502, {
+            "error": "AgentCore invocation failed.",
+            "code": error.get("Code"),
+            "details": error.get("Message")
+        })
+
+    except Exception as exc:
         return build_response(500, {
             "error": "Internal gateway routing exception during execution.",
-            "details": str(e)
+            "details": str(exc)
         })
 
-def build_response(status_code: int, payload: dict) -> dict:
-    """
-    Generates a structured dictionary compliant with the 
-    API Gateway Lambda Proxy Integration response standard.
-    """
+
+def parse_body(event: Dict[str, Any]) -> Dict[str, Any]:
+    body = event.get("body")
+
+    if body is None:
+        return event if isinstance(event, dict) else {}
+
+    if event.get("isBase64Encoded"):
+        body = base64.b64decode(body).decode("utf-8")
+
+    if isinstance(body, dict):
+        return body
+
+    if isinstance(body, str):
+        if not body.strip():
+            return {}
+
+        try:
+            parsed = json.loads(body)
+        except json.JSONDecodeError as exc:
+            raise ValueError(str(exc)) from exc
+
+        if not isinstance(parsed, dict):
+            raise ValueError("JSON body must be an object.")
+
+        return parsed
+
+    raise ValueError("Unsupported request body format.")
+
+
+def get_session_id(event: Dict[str, Any]) -> str:
+    headers = normalize_headers(event.get("headers", {}))
+
+    return (
+        headers.get("x-session-id")
+        or headers.get("x-amzn-bedrock-agentcore-runtime-session-id")
+        or event.get("requestContext", {}).get("requestId")
+        or str(uuid.uuid4())
+    )
+
+
+def normalize_headers(headers: Optional[Dict[str, Any]]) -> Dict[str, str]:
+    if not headers:
+        return {}
+
+    return {
+        str(key).lower(): str(value)
+        for key, value in headers.items()
+        if value is not None
+    }
+
+
+def read_agentcore_payload(payload_stream: Any) -> str:
+    if payload_stream is None:
+        return ""
+
+    if hasattr(payload_stream, "read"):
+        return payload_stream.read().decode("utf-8")
+
+    chunks = []
+
+    for event in payload_stream:
+        if "chunk" in event:
+            chunk = event["chunk"]
+            chunk_bytes = chunk.get("bytes") or chunk.get("data")
+            if chunk_bytes:
+                chunks.append(chunk_bytes.decode("utf-8"))
+        elif "payloadPart" in event:
+            chunk_bytes = event["payloadPart"].get("bytes")
+            if chunk_bytes:
+                chunks.append(chunk_bytes.decode("utf-8"))
+
+    return "".join(chunks)
+
+
+def parse_agent_response(response_body: str) -> Any:
+    if not response_body:
+        return {}
+
+    try:
+        return json.loads(response_body)
+    except json.JSONDecodeError:
+        return {
+            "raw_response": response_body
+        }
+
+
+def build_response(status_code: int, payload: Any) -> Dict[str, Any]:
     return {
         "statusCode": status_code,
         "headers": {
             "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",  # Adjust to your custom domain in production
+            "Access-Control-Allow-Origin": os.environ.get("CORS_ALLOW_ORIGIN", "*"),
             "Access-Control-Allow-Methods": "POST,OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key"
+            "Access-Control-Allow-Headers": (
+                "Content-Type,"
+                "X-Amz-Date,"
+                "Authorization,"
+                "X-Api-Key,"
+                "X-Session-Id,"
+                "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id"
+            )
         },
-        "body": json.dumps(payload)
+        "body": json.dumps(payload, ensure_ascii=False)
     }
