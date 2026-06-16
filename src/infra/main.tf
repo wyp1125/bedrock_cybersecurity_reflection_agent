@@ -34,6 +34,7 @@ resource "aws_s3_object" "agent_code" {
 }
 
 # 4. Provision the underlying Bedrock Agent Configuration
+# FIXED: remap resource name to aws_bedrockagent_agent
 resource "aws_bedrockagent_agent" "nist_reflection_agent" {
   agent_name                  = local.config.agent_runtime.agent_name
   agent_resource_role_arn     = aws_iam_role.agent_execution_role.arn
@@ -47,14 +48,14 @@ resource "aws_bedrockagent_agent" "nist_reflection_agent" {
 }
 
 # 5. Compile the active operational version sequence code block 
-# FIXED: Updated type string to correct provider resource schema
+# FIXED: remap resource name to aws_bedrockagent_agent_version
 resource "aws_bedrockagent_agent_version" "latest" {
   agent_id    = aws_bedrockagent_agent.nist_reflection_agent.id
   description = "Strands framework deployment synced by Terraform tracking hash: ${data.archive_file.agent_bundle.output_md5}"
 }
 
 # 6. Establish the operational pipeline testing alias endpoint
-# FIXED: Updated type string to correct provider resource schema
+# FIXED: remap resource name to aws_bedrockagent_agent_alias
 resource "aws_bedrockagent_agent_alias" "test_alias" {
   agent_id         = aws_bedrockagent_agent.nist_reflection_agent.id
   agent_alias_name = "TSTALIASID"
