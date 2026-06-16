@@ -101,6 +101,7 @@ resource "aws_bedrockagentcore_agent_runtime" "nist_reflection_agent" {
 
   lifecycle_configuration {
     idle_runtime_session_timeout = local.timeout
+    max_lifetime                 = 28800
   }
 
   depends_on = [
