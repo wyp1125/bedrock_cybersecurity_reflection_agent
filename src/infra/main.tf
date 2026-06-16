@@ -21,6 +21,10 @@ locals {
 
   agent_runtime_name = local.config.agent_runtime.agent_name
   project_name       = local.config.project.name
+
+  max_rounds   = try(local.config.agent_runtime.max_rounds, 5)
+  target_score = try(local.config.agent_runtime.target_score, 4)
+  timeout      = try(local.config.agent_runtime.timeout_seconds, 900)
 }
 
 provider "aws" {
@@ -30,19 +34,14 @@ provider "aws" {
 data "aws_caller_identity" "current" {}
 
 locals {
-  account_id = data.aws_caller_identity.current.account_id
-
+  account_id            = data.aws_caller_identity.current.account_id
   inference_profile_arn = "arn:aws:bedrock:${local.aws_region}:${local.account_id}:inference-profile/${local.model_id}"
 }
-
-# -----------------------------------------------------------------------------
-# Package Strands AgentCore app
-# -----------------------------------------------------------------------------
 
 data "archive_file" "agent_bundle" {
   type        = "zip"
   source_dir  = "${path.module}/../"
-  output_path = "${path.module}/artifacts/agent_bundle.zip"
+  output_path = "${path.module}/agent_bundle.zip"
 
   excludes = [
     "infra",
@@ -65,10 +64,6 @@ resource "aws_s3_object" "agent_code" {
   etag   = data.archive_file.agent_bundle.output_md5
 }
 
-# -----------------------------------------------------------------------------
-# AgentCore Runtime for Strands app
-# -----------------------------------------------------------------------------
-
 resource "aws_bedrockagentcore_agent_runtime" "nist_reflection_agent" {
   agent_runtime_name = local.agent_runtime_name
   description        = "Strands NIST reflection agent deployed to Bedrock AgentCore Runtime"
@@ -89,11 +84,11 @@ resource "aws_bedrockagentcore_agent_runtime" "nist_reflection_agent" {
   }
 
   environment_variables = {
-    BEDROCK_MODEL_ID          = local.model_id
-    AWS_REGION               = local.aws_region
-    AWS_DEFAULT_REGION       = local.aws_region
-    MAX_REFLECTION_ROUNDS    = tostring(local.config.agent_runtime.max_rounds)
-    TARGET_REFLECTION_SCORE  = tostring(local.config.agent_runtime.target_score)
+    BEDROCK_MODEL_ID         = local.model_id
+    AWS_REGION              = local.aws_region
+    AWS_DEFAULT_REGION      = local.aws_region
+    MAX_REFLECTION_ROUNDS   = tostring(local.max_rounds)
+    TARGET_REFLECTION_SCORE = tostring(local.target_score)
   }
 
   network_configuration {
@@ -105,13 +100,14 @@ resource "aws_bedrockagentcore_agent_runtime" "nist_reflection_agent" {
   }
 
   lifecycle_configuration {
-    idle_runtime_session_timeout = local.config.agent_runtime.timeout_seconds
+    idle_runtime_session_timeout = local.timeout
   }
 
   depends_on = [
     aws_s3_object.agent_code,
     aws_iam_role_policy.agentcore_model_access,
-    aws_iam_role_policy.agentcore_s3_access
+    aws_iam_role_policy.agentcore_s3_access,
+    aws_iam_role_policy.agentcore_logs
   ]
 }
 
@@ -121,14 +117,10 @@ resource "aws_bedrockagentcore_agent_runtime_endpoint" "default" {
   description      = "Default endpoint for Lambda proxy invocation"
 }
 
-# -----------------------------------------------------------------------------
-# Lambda proxy package
-# -----------------------------------------------------------------------------
-
 data "archive_file" "lambda_bundle" {
   type        = "zip"
   source_file = "${path.module}/lambda/index.py"
-  output_path = "${path.module}/artifacts/lambda_function.zip"
+  output_path = "${path.module}/lambda_function.zip"
 }
 
 resource "aws_lambda_function" "api_proxy" {
@@ -138,7 +130,7 @@ resource "aws_lambda_function" "api_proxy" {
   handler          = "index.lambda_handler"
   runtime          = "python3.11"
   source_code_hash = data.archive_file.lambda_bundle.output_base64sha256
-  timeout          = local.config.agent_runtime.timeout_seconds
+  timeout          = local.timeout
 
   environment {
     variables = {
@@ -155,22 +147,62 @@ resource "aws_lambda_function" "api_proxy" {
   ]
 }
 
-# -----------------------------------------------------------------------------
-# IAM: AgentCore Runtime execution role
-# -----------------------------------------------------------------------------
-
 resource "aws_iam_role" "agentcore_execution_role" {
   name = "terraform-cybersecurity-agentcore-execution-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
+      Sid    = "AssumeRolePolicy"
       Action = "sts:AssumeRole"
       Effect = "Allow"
       Principal = {
         Service = "bedrock-agentcore.amazonaws.com"
       }
+      Condition = {
+        StringEquals = {
+          "aws:SourceAccount" = local.account_id
+        }
+        ArnLike = {
+          "aws:SourceArn" = "arn:aws:bedrock-agentcore:${local.aws_region}:${local.account_id}:*"
+        }
+      }
     }]
+  })
+}
+
+resource "aws_iam_role_policy" "agentcore_logs" {
+  name = "terraform-cybersecurity-agentcore-logs-policy"
+  role = aws_iam_role.agentcore_execution_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowAgentCoreLogGroups"
+        Effect = "Allow"
+        Action = [
+          "logs:DescribeLogStreams",
+          "logs:CreateLogGroup"
+        ]
+        Resource = "arn:aws:logs:${local.aws_region}:${local.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*"
+      },
+      {
+        Sid      = "AllowDescribeLogGroups"
+        Effect   = "Allow"
+        Action   = ["logs:DescribeLogGroups"]
+        Resource = "arn:aws:logs:${local.aws_region}:${local.account_id}:log-group:*"
+      },
+      {
+        Sid    = "AllowAgentCoreLogStreams"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:${local.aws_region}:${local.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*:log-stream:*"
+      }
+    ]
   })
 }
 
@@ -212,20 +244,14 @@ resource "aws_iam_role_policy" "agentcore_model_access" {
         ]
       },
       {
-        Sid    = "AllowReadInferenceProfile"
-        Effect = "Allow"
-        Action = [
-          "bedrock:GetInferenceProfile"
-        ]
+        Sid      = "AllowReadInferenceProfile"
+        Effect   = "Allow"
+        Action   = ["bedrock:GetInferenceProfile"]
         Resource = local.inference_profile_arn
       }
     ]
   })
 }
-
-# -----------------------------------------------------------------------------
-# IAM: Lambda execution role
-# -----------------------------------------------------------------------------
 
 resource "aws_iam_role" "lambda_execution_role" {
   name = "terraform-cybersecurity-lambda-proxy-execution-role"
@@ -280,10 +306,6 @@ resource "aws_iam_role_policy" "lambda_agentcore_invocation" {
     }]
   })
 }
-
-# -----------------------------------------------------------------------------
-# Outputs
-# -----------------------------------------------------------------------------
 
 output "agent_runtime_id" {
   value       = aws_bedrockagentcore_agent_runtime.nist_reflection_agent.agent_runtime_id
