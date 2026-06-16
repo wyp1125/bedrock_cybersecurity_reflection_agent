@@ -119,7 +119,7 @@ resource "aws_bedrockagentcore_agent_runtime_endpoint" "default" {
 
 data "archive_file" "lambda_bundle" {
   type        = "zip"
-  source_file = "${path.module}/lambda/index.py"
+  source_file = "${path.module}/lambda_function.py"
   output_path = "${path.module}/lambda_function.zip"
 }
 
@@ -127,7 +127,7 @@ resource "aws_lambda_function" "api_proxy" {
   filename         = data.archive_file.lambda_bundle.output_path
   function_name    = "${local.project_name}-api-proxy"
   role             = aws_iam_role.lambda_execution_role.arn
-  handler          = "index.lambda_handler"
+  handler          = "lambda_function.lambda_handler"
   runtime          = "python3.11"
   source_code_hash = data.archive_file.lambda_bundle.output_base64sha256
   timeout          = local.timeout
