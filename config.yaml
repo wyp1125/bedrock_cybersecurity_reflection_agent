@@ -17,7 +17,7 @@ infrastructure:
     staging_prefix: "agents/cybersecurity-reflection-agent"
 
 agent_runtime:
-  agent_name: "nist-mapping-reflection-agent"
+  agent_name: "nist_mapping_reflection_agent"
   model_id: "us.anthropic.claude-sonnet-4-6"
   max_reflection_rounds: 5
   timeout_seconds: 120
