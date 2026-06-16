@@ -148,7 +148,7 @@ resource "aws_lambda_function" "api_proxy" {
 }
 
 resource "aws_iam_role" "agentcore_execution_role" {
-  name = "terraform-cybersecurity-agentcore-execution-role"
+  name = "terraform-reflection-agent-execution-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
