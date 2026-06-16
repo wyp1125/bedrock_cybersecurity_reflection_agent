@@ -2,7 +2,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from dotenv import load_dotenv
 from strands import Agent
@@ -17,31 +17,60 @@ except ImportError:
 load_dotenv()
 
 app = BedrockAgentCoreApp()
-
 BASE_DIR = Path(__file__).parent
 
 MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6")
-AWS_REGION = os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1"))
+BEDROCK_REGION = (
+    os.getenv("BEDROCK_REGION")
+    or os.getenv("AWS_REGION")
+    or os.getenv("AWS_DEFAULT_REGION")
+    or "us-east-1"
+)
+
 MAX_ROUNDS = int(os.getenv("MAX_REFLECTION_ROUNDS", "5"))
 TARGET_SCORE = int(os.getenv("TARGET_REFLECTION_SCORE", "4"))
+
+_generator_agent: Optional[Agent] = None
+_evaluator_agent: Optional[Agent] = None
 
 
 def read_prompt_file(filename: str) -> str:
     path = BASE_DIR / filename
     if not path.exists():
         raise FileNotFoundError(f"Missing required prompt file: {path}")
-
     return path.read_text(encoding="utf-8").strip()
 
 
-gen_prompt = read_prompt_file("generator_prompt.txt")
-eval_prompt = read_prompt_file("evaluator_prompt.txt")
+def get_agents() -> Tuple[Agent, Agent]:
+    """
+    Lazily initialize Strands agents after runtime startup.
+    This avoids AgentCore initialization timeout.
+    """
+    global _generator_agent, _evaluator_agent
+
+    if _generator_agent is None or _evaluator_agent is None:
+        gen_prompt = read_prompt_file("generator_prompt.txt")
+        eval_prompt = read_prompt_file("evaluator_prompt.txt")
+
+        model_provider = BedrockModel(
+            model_id=MODEL_ID,
+            region_name=BEDROCK_REGION,
+        )
+
+        _generator_agent = Agent(
+            model=model_provider,
+            system_prompt=gen_prompt,
+        )
+
+        _evaluator_agent = Agent(
+            model=model_provider,
+            system_prompt=eval_prompt,
+        )
+
+    return _generator_agent, _evaluator_agent
 
 
 def message_to_text(response: Any) -> str:
-    """
-    Extracts text from common Strands / Bedrock response shapes.
-    """
     message = getattr(response, "message", response)
 
     if isinstance(message, str):
@@ -73,24 +102,26 @@ def message_to_text(response: Any) -> str:
 
 
 def extract_json_text(text: str) -> str:
-    """
-    Extracts JSON from plain text or fenced markdown.
-    """
     text = str(text).strip()
 
-    fence_match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
+    fence_match = re.search(
+        r"```(?:json)?\s*(.*?)\s*```",
+        text,
+        re.DOTALL | re.IGNORECASE,
+    )
+
     if fence_match:
         return fence_match.group(1).strip()
 
-    start = min(
-        [i for i in [text.find("{"), text.find("[")] if i != -1],
-        default=-1
-    )
+    json_start_positions = [
+        index for index in (text.find("{"), text.find("["))
+        if index != -1
+    ]
 
-    if start == -1:
+    if not json_start_positions:
         return text
 
-    return text[start:].strip()
+    return text[min(json_start_positions):].strip()
 
 
 def safe_json_loads(text: str) -> Optional[Any]:
@@ -101,15 +132,13 @@ def safe_json_loads(text: str) -> Optional[Any]:
 
 
 def normalize_payload(payload: Any) -> Dict[str, Any]:
-    """
-    Handles direct AgentCore payloads and Lambda/API Gateway-style body payloads.
-    """
     if payload is None:
         return {}
 
     if isinstance(payload, str):
         try:
-            return json.loads(payload)
+            parsed = json.loads(payload)
+            return parsed if isinstance(parsed, dict) else {"prompt": payload}
         except json.JSONDecodeError:
             return {"prompt": payload}
 
@@ -129,26 +158,9 @@ def normalize_payload(payload: Any) -> Dict[str, Any]:
     return {"prompt": str(payload)}
 
 
-model_provider = BedrockModel(
-    model_id=MODEL_ID,
-    region_name=AWS_REGION,
-)
-
-generator_agent = Agent(
-    model=model_provider,
-    system_prompt=gen_prompt,
-)
-
-evaluator_agent = Agent(
-    model=model_provider,
-    system_prompt=eval_prompt,
-)
-
-
 def run_reflection_loop(cyber_issue: str) -> Dict[str, Any]:
-    """
-    Executes an iterative generator/evaluator reflection loop.
-    """
+    generator_agent, evaluator_agent = get_agents()
+
     feedback_history = ""
     latest_mappings = ""
     score = 1
@@ -225,25 +237,24 @@ def run_reflection_loop(cyber_issue: str) -> Dict[str, Any]:
 
 @app.entrypoint
 def handle_agent_invocation(payload: Any) -> Dict[str, Any]:
-    """
-    Bedrock AgentCore Runtime entrypoint.
-
-    Expected direct payload:
-    {
-      "prompt": "Vulnerability context description"
-    }
-    """
     normalized = normalize_payload(payload)
-    user_prompt = normalized.get("prompt") or normalized.get("input") or normalized.get("message")
+
+    user_prompt = (
+        normalized.get("prompt")
+        or normalized.get("issue")
+        or normalized.get("input")
+        or normalized.get("message")
+    )
 
     if not user_prompt:
         return {
-            "error": "Missing required prompt. Expected key: 'prompt'."
+            "error": "Missing required prompt. Expected key: prompt, issue, input, or message."
         }
 
     try:
-        result = run_reflection_loop(str(user_prompt))
-        return {"result": result}
+        return {
+            "result": run_reflection_loop(str(user_prompt))
+        }
     except Exception as exc:
         print(f"[ERROR] Agent invocation failed: {exc}")
         return {
