@@ -45,18 +45,15 @@ jobs:
         working-directory: src/infra
         run: terraform fmt -recursive
 
-      - name: Initialize and Apply Test Stack
+      - name: Terraform Init
+        working-directory: src/infra
+        run: terraform init -upgrade
+
+      - name: Import existing IAM roles
+        working-directory: src/infra
         run: |
-          BUCKET=$(grep 's3_bucket:' config.yaml | awk -F'"' '{print $2}')
-          STATE_KEY=$(grep 'state_key:' config.yaml | awk -F'"' '{print $2}')
-          REGION=${{ env.AWS_REGION }}
-        
-          cd src/infra
-        
-          terraform init \
-          -backend-config="bucket=${BUCKET}" \
-          -backend-config="key=${STATE_KEY}" \
-          -backend-config="region=${REGION}"
+          terraform import aws_iam_role.lambda_execution_role terraform-cybersecurity-lambda-proxy-execution-role || true
+          terraform import aws_iam_role.agentcore_execution_role terraform-reflection-agent-execution-role || true
         
       - name: Terraform Validate
         working-directory: src/infra
