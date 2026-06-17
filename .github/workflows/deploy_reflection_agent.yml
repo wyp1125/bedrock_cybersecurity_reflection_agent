@@ -49,7 +49,7 @@ jobs:
         run: |
           BUCKET=$(grep 's3_bucket:' config.yaml | awk -F'"' '{print $2}')
           STATE_KEY=$(grep 'state_key:' config.yaml | awk -F'"' '{print $2}')
-          REGION=$(grep 'aws_region:' config.yaml | awk -F'"' '{print $2}')
+          REGION=${{ env.AWS_REGION }}
         
           cd src/infra
         
