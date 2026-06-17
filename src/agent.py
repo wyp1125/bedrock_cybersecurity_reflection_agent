@@ -14,7 +14,7 @@ except ImportError:
 
 
 app = BedrockAgentCoreApp()
-
+print("FILES:", os.listdir("."), flush=True)
 BASE_DIR = Path(__file__).parent
 
 MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6")
