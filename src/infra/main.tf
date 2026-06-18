@@ -64,7 +64,7 @@ resource "aws_s3_object" "agent_code" {
   etag   = data.archive_file.agent_bundle.output_md5
 }
 
-resource "aws_bedrockagentcore_agent_runtime" "nist_reflection_agent2" {
+resource "aws_bedrockagentcore_agent_runtime" "nist_reflection_agent22" {
   agent_runtime_name = local.agent_runtime_name
   description        = "Strands NIST reflection agent deployed to Bedrock AgentCore Runtime"
   role_arn           = aws_iam_role.agentcore_execution_role.arn
@@ -114,7 +114,7 @@ resource "aws_bedrockagentcore_agent_runtime" "nist_reflection_agent2" {
 
 resource "aws_bedrockagentcore_agent_runtime_endpoint" "default" {
   name             = "default"
-  agent_runtime_id = aws_bedrockagentcore_agent_runtime.nist_reflection_agent.agent_runtime_id
+  agent_runtime_id = aws_bedrockagentcore_agent_runtime.nist_reflection_agent2.agent_runtime_id
   description      = "Default endpoint for Lambda proxy invocation"
 }
 
@@ -135,7 +135,7 @@ resource "aws_lambda_function" "api_proxy" {
 
   environment {
     variables = {
-      AGENT_RUNTIME_ARN       = aws_bedrockagentcore_agent_runtime.nist_reflection_agent.agent_runtime_arn
+      AGENT_RUNTIME_ARN       = aws_bedrockagentcore_agent_runtime.nist_reflection_agent2.agent_runtime_arn
       AGENT_RUNTIME_QUALIFIER = aws_bedrockagentcore_agent_runtime_endpoint.default.name
     }
   }
@@ -299,20 +299,20 @@ resource "aws_iam_role_policy" "lambda_agentcore_invocation" {
         "bedrock-agentcore:InvokeAgentRuntime"
       ]
       Resource = [
-        aws_bedrockagentcore_agent_runtime.nist_reflection_agent.agent_runtime_arn,
-        "${aws_bedrockagentcore_agent_runtime.nist_reflection_agent.agent_runtime_arn}/*"
+        aws_bedrockagentcore_agent_runtime.nist_reflection_agent2.agent_runtime_arn,
+        "${aws_bedrockagentcore_agent_runtime.nist_reflection_agent2.agent_runtime_arn}/*"
       ]
     }]
   })
 }
 
 output "agent_runtime_id" {
-  value       = aws_bedrockagentcore_agent_runtime.nist_reflection_agent.agent_runtime_id
+  value       = aws_bedrockagentcore_agent_runtime.nist_reflection_agent2.agent_runtime_id
   description = "Bedrock AgentCore Runtime ID"
 }
 
 output "agent_runtime_arn" {
-  value       = aws_bedrockagentcore_agent_runtime.nist_reflection_agent.agent_runtime_arn
+  value       = aws_bedrockagentcore_agent_runtime.nist_reflection_agent2.agent_runtime_arn
   description = "Bedrock AgentCore Runtime ARN"
 }
 
