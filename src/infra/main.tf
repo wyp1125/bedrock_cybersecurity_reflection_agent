@@ -64,7 +64,7 @@ resource "aws_s3_object" "agent_code" {
   etag   = data.archive_file.agent_bundle.output_md5
 }
 
-resource "aws_bedrockagentcore_agent_runtime" "nist_reflection_agent22" {
+resource "aws_bedrockagentcore_agent_runtime" "nist_reflection_agent2" {
   agent_runtime_name = local.agent_runtime_name
   description        = "Strands NIST reflection agent deployed to Bedrock AgentCore Runtime"
   role_arn           = aws_iam_role.agentcore_execution_role.arn
